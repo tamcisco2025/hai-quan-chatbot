@@ -1,8 +1,10 @@
 import os
-os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 import re
 import time
 from typing import List, Dict, Any
+
+# Bật fast transfer cho huggingface_hub (tăng tốc tải model/tokenizer)
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
 import gradio as gr
 from unidecode import unidecode
@@ -49,14 +51,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 # =========================
-# 1) LLM & Embeddings
+# 1) LLM & Embeddings (tối ưu tải nhanh/nhẹ)
 # =========================
 print("\n[Init] Loading LLM ...")
-# Tải tokenizer nhanh (use_fast) và model với low_cpu_mem_usage để khởi tạo nhẹ hơn
 tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True)
 model = AutoModelForCausalLM.from_pretrained(
     LLM_NAME,
-    low_cpu_mem_usage=True,
+    low_cpu_mem_usage=True,   # tiết kiệm RAM khi load
 )
 llm_pipe = pipeline(
     task="text-generation",
