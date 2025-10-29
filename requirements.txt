@@ -1,5 +1,6 @@
 # UI
 gradio==4.44.0
+huggingface_hub[hf_transfer]
 
 
 # RAG
@@ -8,16 +9,18 @@ llama-index-embeddings-huggingface
 llama-index-vector-stores-chroma
 chromadb==0.5.5
 sentence-transformers>=2.7.0
+huggingface_hub[hf_transfer]
 
 
 # Models (CPU)
 transformers>=4.44.0
+huggingface_hub[hf_transfer]
 # Dòng dưới giúp cài torch CPU nhanh hơn trên nhiều môi trường, có thể bỏ nếu build lỗi
 torch --extra-index-url https://download.pytorch.org/whl/cpu
+huggingface_hub[hf_transfer]
 
 
 # Parsers
 pypdf
 python-docx
 unidecode
-
