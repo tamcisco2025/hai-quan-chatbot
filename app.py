@@ -3,8 +3,10 @@ import re
 import time
 from typing import List, Dict, Any
 
-# Bật fast transfer cho huggingface_hub (tăng tốc tải model/tokenizer)
+# --- Bật tăng tốc tải model/tokenizer & tắt telemetry của Chroma
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+os.environ["CHROMA_DISABLE_TELEMETRY"] = "1"
+os.environ["CHROMA_TELEMETRY_IMPLEMENTATION"] = "noop"
 
 import gradio as gr
 from unidecode import unidecode
@@ -22,6 +24,7 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 # ---- Vector store: Chroma
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
+from chromadb.config import Settings as ChromaSettings
 
 # ---- Lightweight open-source LLM for CPU
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -107,7 +110,12 @@ def extract_refs(text: str) -> Dict[str, str]:
 # 3) Dựng / nạp Index (an toàn khi thư mục trống)
 # =========================
 print("[Init] Building Chroma store ...")
-chroma_client = chromadb.Client()
+chroma_client = chromadb.Client(
+    ChromaSettings(
+        anonymized_telemetry=False,  # tắt gửi telemetry
+        allow_reset=True,            # tiện cho dev
+    )
+)
 collection = chroma_client.get_or_create_collection(INDEX_NAME)
 vector_store = ChromaVectorStore(chroma_collection=collection)
 index: VectorStoreIndex = None
