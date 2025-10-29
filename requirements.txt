@@ -1,0 +1,19 @@
+# UI
+gradio==4.44.0
+
+# RAG
+llama-index==0.11.0
+llama-index-embeddings-huggingface
+llama-index-vector-stores-chroma
+chromadb==0.5.5
+sentence-transformers>=2.7.0
+
+# Models (CPU)
+transformers>=4.44.0
+# Dòng dưới giúp cài torch CPU nhanh hơn trên nhiều môi trường, có thể bỏ nếu build lỗi
+torch --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Parsers
+pypdf
+python-docx
+unidecode
