@@ -26,7 +26,7 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
-# ---- Lightweight open-source LLM for CPU
+# ---- Lightweight open-source LLM cho CPU
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 
@@ -60,7 +60,7 @@ print("\n[Init] Loading LLM ...")
 tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True)
 model = AutoModelForCausalLM.from_pretrained(
     LLM_NAME,
-    low_cpu_mem_usage=True,   # tiết kiệm RAM khi load
+    low_cpu_mem_usage=True,
 )
 llm_pipe = pipeline(
     task="text-generation",
@@ -72,6 +72,7 @@ llm_pipe = pipeline(
 
 Settings.embed_model = HuggingFaceEmbedding(model_name=EMBEDDING_MODEL)
 Settings.node_parser = SentenceSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+Settings.llm = None  # <<< Quan trọng: tắt LLM mặc định (OpenAI) của LlamaIndex
 
 
 # =========================
@@ -112,8 +113,8 @@ def extract_refs(text: str) -> Dict[str, str]:
 print("[Init] Building Chroma store ...")
 chroma_client = chromadb.Client(
     ChromaSettings(
-        anonymized_telemetry=False,  # tắt gửi telemetry
-        allow_reset=True,            # tiện cho dev
+        anonymized_telemetry=False,
+        allow_reset=True,
     )
 )
 collection = chroma_client.get_or_create_collection(INDEX_NAME)
@@ -166,7 +167,6 @@ def build_or_update_index(base_dirs: List[str]):
 print("[Init] Loading documents & indexing ...")
 dirs = [p for p in [DATA_DIR, UPLOAD_DIR] if has_supported_files(p)]
 if not dirs:
-    # tạo index rỗng để app vẫn chạy khi chưa có tài liệu
     index = VectorStoreIndex.from_documents([], vector_store=vector_store)
 else:
     build_or_update_index(dirs)
@@ -217,7 +217,6 @@ def format_citations(source_nodes) -> str:
         if parts:
             seg += " – " + ", ".join(parts)
         cites.append(f"[{seg}]")
-    # loại trùng
     uniq = []
     for c in cites:
         if c not in uniq:
@@ -276,7 +275,6 @@ def handle_upload(files: List[gr.File]):
         with open(dest, "wb") as w:
             w.write(f.read())
         saved.append(os.path.basename(dest))
-    # cập nhật index nhanh
     build_or_update_index([DATA_DIR, UPLOAD_DIR])
     global query_engine
     query_engine = index.as_query_engine(similarity_top_k=TOP_K, response_mode="compact")
