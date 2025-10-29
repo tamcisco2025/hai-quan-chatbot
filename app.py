@@ -1,13 +1,12 @@
 import os
 import re
-import io
 import time
 from typing import List, Dict, Any
 
 import gradio as gr
 from unidecode import unidecode
 
-# LlamaIndex core
+# ---- LlamaIndex core
 from llama_index.core import (
     VectorStoreIndex,
     SimpleDirectoryReader,
@@ -17,12 +16,13 @@ from llama_index.core import (
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
-# Vector store: Chroma
+# ---- Vector store: Chroma
 from llama_index.vector_stores.chroma import ChromaVectorStore
 import chromadb
 
-# Lightweight open-source LLM for CPU (tiếng Việt khá ổn với prompt ngắn)
+# ---- Lightweight open-source LLM for CPU
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
 
 # =========================
 # 0) Cấu hình
@@ -31,13 +31,13 @@ DATA_DIR = os.getenv("DATA_DIR", "data")
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 INDEX_NAME = "hai-quan-vn"
 
-# Model ngắn gọn, chạy CPU nhanh
-LLM_NAME = os.getenv("LLM_NAME", "Qwen/Qwen2.5-1.5B-Instruct")
+# Model nhỏ để chạy mượt trên CPU free
+LLM_NAME = os.getenv("LLM_NAME", "Qwen/Qwen2.5-0.5B-Instruct")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
 FALLBACK_MSG = "Chủ đề này tôi chưa được cập nhật. Xin hãy chọn chủ đề khác."
 
-# Ngưỡng tối thiểu coi là có căn cứ
+# Ngưỡng tìm kiếm
 SIM_THRESHOLD = float(os.getenv("SIM_THRESHOLD", "0.30"))
 TOP_K = int(os.getenv("TOP_K", "5"))
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
@@ -45,6 +45,7 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 # =========================
 # 1) LLM & Embeddings
@@ -61,6 +62,7 @@ llm_pipe = pipeline(
 
 Settings.embed_model = HuggingFaceEmbedding(model_name=EMBEDDING_MODEL)
 Settings.node_parser = SentenceSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+
 
 # =========================
 # 2) Tiện ích metadata & parser
@@ -93,8 +95,9 @@ def extract_refs(text: str) -> Dict[str, str]:
     k = KHOAN_RE.search(text)
     return {"dieu": d.group(1) if d else None, "khoan": k.group(1) if k else None}
 
+
 # =========================
-# 3) Dựng / nạp Index
+# 3) Dựng / nạp Index (an toàn khi thư mục trống)
 # =========================
 print("[Init] Building Chroma store ...")
 chroma_client = chromadb.Client()
@@ -107,7 +110,7 @@ def has_supported_files(path: str) -> bool:
     """Kiểm tra thư mục có chứa ít nhất 1 file .pdf/.docx/.txt hay không."""
     if not os.path.isdir(path):
         return False
-    for root, _, files in os.walk(path):
+    for _, _, files in os.walk(path):
         if any(f.lower().endswith((".pdf", ".docx", ".txt")) for f in files):
             return True
     return False
@@ -123,13 +126,13 @@ def load_documents_from_dir(path: str) -> List[Document]:
         recursive=True,
     )
     docs = reader.load_data()
+
     enriched = []
     for d in docs:
         meta = d.metadata or {}
         name = meta.get("file_name") or os.path.basename(meta.get("filepath", ""))
         ty = guess_type_and_year(name)
         meta.update(ty)
-        # Giữ nguyên các metadata có sẵn như page_label nếu có
         enriched.append(Document(text=d.text, metadata=meta))
     return enriched
 
@@ -140,7 +143,6 @@ def build_or_update_index(base_dirs: List[str]):
     for p in base_dirs:
         docs.extend(load_documents_from_dir(p))
     if not docs:
-        # tạo index rỗng để không lỗi
         index = VectorStoreIndex.from_documents([], vector_store=vector_store)
         return
     index = VectorStoreIndex.from_documents(docs, vector_store=vector_store)
@@ -155,34 +157,33 @@ else:
     build_or_update_index(dirs)
 query_engine = index.as_query_engine(similarity_top_k=TOP_K, response_mode="compact")
 
+
 # =========================
-# 4) Truy vấn có bộ lọc
+# 4) Truy vấn + trích dẫn chỉ còn [Tên văn bản – Điều/Khoản]
 # =========================
 SYSTEM_PROMPT = (
     "Bạn là trợ lý nghiệp vụ hải quan Việt Nam. Chỉ trả lời dựa trên tài liệu đã cung cấp. "
     "Nếu không có căn cứ phù hợp, hãy trả lời đúng thông điệp: 'Chủ đề này tôi chưa được cập nhật. Xin hãy chọn chủ đề khác.' "
-    "Trả lời ngắn gọn, rõ ràng, kèm trích dẫn nguồn theo dạng [Tên văn bản – Điều/Khoản – Trang]."
+    "Trả lời ngắn gọn, rõ ràng, kèm trích dẫn nguồn theo dạng [Tên văn bản – Điều/Khoản]."
 )
 
 
 def filter_nodes_by_metadata(nodes, loai: str = None, nam: int = None, dieu: str = None, khoan: str = None):
-    # Lọc thô sau khi retrieve: giữ những node có metadata phù hợp
     def ok(node):
         m = node.metadata or {}
         if loai and m.get("loai") != loai:
             return False
         if nam and m.get("nam") != nam:
             return False
-        # Nếu người dùng yêu cầu Điều/Khoản, ưu tiên đoạn có chứa
         t = node.get_content(metadata_mode="none")
-        if dieu and (f"Điều {dieu}" not in t and f"ĐiỀu {dieu}" not in t):
+        if dieu and f"Điều {dieu}" not in t:
             return False
-        if khoan and (f"Khoản {khoan}" not in t and f"KhoẢn {khoan}" not in t):
+        if khoan and f"Khoản {khoan}" not in t:
             return False
         return True
 
     kept = [n for n in nodes if ok(n)]
-    return kept if kept else nodes  # nếu lọc rỗng, trả về danh sách gốc để không mất thông tin
+    return kept if kept else nodes
 
 
 def format_citations(source_nodes) -> str:
@@ -190,8 +191,7 @@ def format_citations(source_nodes) -> str:
     for sn in source_nodes:
         meta = sn.metadata or {}
         name = meta.get("file_name") or os.path.basename(meta.get("filepath", "Nguon"))
-        page = meta.get("page_label") or meta.get("page")
-        # cố gắng đoán điều/khoản trong chunk
+        # KHÔNG dùng trang/mục — chỉ Điều/Khoản
         refs = extract_refs(sn.get_content(metadata_mode="none"))
         seg = name
         parts = []
@@ -199,8 +199,6 @@ def format_citations(source_nodes) -> str:
             parts.append(f"Điều {refs['dieu']}")
         if refs.get("khoan"):
             parts.append(f"Khoản {refs['khoan']}")
-        if page is not None:
-            parts.append(f"Trang {page}")
         if parts:
             seg += " – " + ", ".join(parts)
         cites.append(f"[{seg}]")
@@ -221,14 +219,13 @@ def answer(question: str, loai: str, nam: str, dieu: str, khoan: str):
     if not question or not question.strip():
         return "Hãy nhập câu hỏi.", ""
 
-    # truy vấn trước
+    # truy vấn
     res = query_engine.query(question)
 
     # kiểm tra độ phủ & lọc metadata
     nodes = getattr(res, "source_nodes", [])
     nodes = filter_nodes_by_metadata(nodes, loai or None, int(nam) if nam else None, dieu or None, khoan or None)
 
-    # heuristic: nếu không có nguồn hoặc điểm thấp → fallback
     avg_sim = 0.0
     if nodes:
         sims = [getattr(n, "score", 0.0) or 0.0 for n in nodes]
@@ -238,11 +235,9 @@ def answer(question: str, loai: str, nam: str, dieu: str, khoan: str):
         return FALLBACK_MSG, ""
 
     # Tạo câu trả lời ngắn gọn dựa vào context
-    # ghép ngữ cảnh
     context = "\n\n".join([n.get_content(metadata_mode="none") for n in nodes[:3]])
     prompt = (
-        SYSTEM_PROMPT
-        + "\n\nTài liệu liên quan:\n" + context
+        "Tài liệu liên quan:\n" + context
         + "\n\nCâu hỏi: " + question
         + "\n\nYêu cầu: Trả lời ngắn gọn (3–6 câu), chỉ dựa vào tài liệu trên, dùng tiếng Việt, và chèn trích dẫn ở cuối."
     )
@@ -253,10 +248,10 @@ def answer(question: str, loai: str, nam: str, dieu: str, khoan: str):
         text = text.rstrip() + "\n\n" + cites
     return text, cites
 
+
 # =========================
 # 5) Upload file & cập nhật index
 # =========================
-
 def handle_upload(files: List[gr.File]):
     saved = []
     if not files:
@@ -272,13 +267,14 @@ def handle_upload(files: List[gr.File]):
     query_engine = index.as_query_engine(similarity_top_k=TOP_K, response_mode="compact")
     return f"Đã tải lên: {', '.join(saved)} (index đã được cập nhật)."
 
+
 # =========================
 # 6) Gradio UI
 # =========================
-
 def ui_answer(q, loai, nam, dieu, khoan):
     text, _ = answer(q, loai, nam, dieu, khoan)
     return text
+
 
 with gr.Blocks(title="Chatbot Hải quan VN (RAG)") as demo:
     gr.Markdown("""
