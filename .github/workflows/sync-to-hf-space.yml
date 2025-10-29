@@ -20,7 +20,7 @@ jobs:
 
       - name: Push to Hugging Face Space (tamcisco/hai-quan-chatbot)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_VCHTCRHBBIEUSPUZWDFDWSLNZRDGLRXRDZ }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -29,7 +29,7 @@ jobs:
           git remote add hf https://huggingface.co/spaces/tamcisco/hai-quan-chatbot || true
 
           # Dùng token để xác thực (ẩn trong logs)
-          git remote set-url hf https://user:${HF_TOKEN}@huggingface.co/spaces/tamcisco/hai-quan-chatbot
+          git remote set-url hf https://user:${HF_VCHTCRHBBIEUSPUZWDFDWSLNZRDGLRXRDZ}@huggingface.co/spaces/tamcisco/hai-quan-chatbot
 
           # Đẩy toàn bộ nội dung nhánh hiện tại sang nhánh main của Space
           git push --force hf HEAD:main
