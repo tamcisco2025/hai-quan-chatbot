@@ -1,4 +1,5 @@
 import os
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 import re
 import time
 from typing import List, Dict, Any
@@ -51,10 +52,15 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # 1) LLM & Embeddings
 # =========================
 print("\n[Init] Loading LLM ...")
-tok = AutoTokenizer.from_pretrained(LLM_NAME)
+# Tải tokenizer nhanh (use_fast) và model với low_cpu_mem_usage để khởi tạo nhẹ hơn
+tok = AutoTokenizer.from_pretrained(LLM_NAME, use_fast=True)
+model = AutoModelForCausalLM.from_pretrained(
+    LLM_NAME,
+    low_cpu_mem_usage=True,
+)
 llm_pipe = pipeline(
     task="text-generation",
-    model=AutoModelForCausalLM.from_pretrained(LLM_NAME),
+    model=model,
     tokenizer=tok,
     max_new_tokens=512,
     do_sample=False,
