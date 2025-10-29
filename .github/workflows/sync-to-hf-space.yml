@@ -2,7 +2,7 @@ name: Sync to Hugging Face Space
 
 on:
   push:
-    branches: [ "main" ]  # đổi nếu bạn dùng nhánh khác (vd: master)
+    branches: [ "main" ]   # đổi nếu bạn dùng nhánh khác
 
 jobs:
   sync:
@@ -20,17 +20,19 @@ jobs:
 
       - name: Push to Hugging Face Space (tamcisco/hai-quan-chatbot)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}   # <-- phải tạo secret này trong GitHub
         run: |
+          set -e
+
+          # Cấu hình tên & email cho commit do workflow tạo (không liên quan đến đăng nhập)
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Thêm remote tới Space của bạn
+          # Thêm remote tới Space (không có dấu gạch chéo ở cuối URL)
           git remote add hf https://huggingface.co/spaces/tamcisco/hai-quan-chatbot || true
 
-          # Dùng token để xác thực (ẩn trong logs)
+          # Dùng token để xác thực (không dùng password). GitHub sẽ tự ẩn $HF_TOKEN trong log.
           git remote set-url hf https://user:${HF_TOKEN}@huggingface.co/spaces/tamcisco/hai-quan-chatbot
 
-          # Đẩy toàn bộ nội dung nhánh hiện tại sang nhánh main của Space
+          # Đẩy nhánh hiện tại sang nhánh main của Space
           git push --force hf HEAD:main
-
